@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly RESOLVE="${REPO_ROOT}/helpers/resolve-release-image.sh"
 readonly PREPARE="${REPO_ROOT}/helpers/prepare-config.sh"
 readonly PULL_SECRET="${REPO_ROOT}/config/pull-secret.json"
-readonly INVENTORY="${REPO_ROOT}/inventory.ini"
+readonly INVENTORY="${REPO_ROOT}/deploy/openshift-clusters/inventory.ini"
 
 PASS=0
 FAIL=0
@@ -260,7 +260,7 @@ test_e2e_fencing_ipi() {
     local outfile="${TMPDIR_BASE}/config_fencing.sh"
     rc=0
     "$PREPARE" --topology fencing --method ipi \
-        --release-image "$resolved" --ci-token "${CI_TOKEN:-placeholder}" \
+        --release-image "$resolved" --ci-token "$CI_TOKEN" \
         --output "$outfile" --force >/dev/null 2>&1 || rc=$?
     assert_exit 0 "$rc" "E2E-1 prepare-config fencing-ipi"
     [[ "$rc" -eq 0 ]] || return
@@ -290,7 +290,7 @@ test_e2e_sno_agent() {
     local outfile="${TMPDIR_BASE}/config_sno.sh"
     rc=0
     "$PREPARE" --topology sno --method agent \
-        --release-image "$resolved" --ci-token "${CI_TOKEN:-placeholder}" \
+        --release-image "$resolved" --ci-token "$CI_TOKEN" \
         --output "$outfile" --force >/dev/null 2>&1 || rc=$?
     assert_exit 0 "$rc" "E2E-2 prepare-config sno-agent"
     [[ "$rc" -eq 0 ]] || return
@@ -305,11 +305,7 @@ test_e2e_doctor() {
 
     local rc=0
     make -C "${REPO_ROOT}/deploy" doctor fencing-ipi 2>&1 || rc=$?
-    if [[ "$rc" -eq 0 ]]; then
-        pass "E2E-3 make doctor fencing-ipi"
-    else
-        echo -e "${COLOR_YELLOW}  NOTE${COLOR_CLEAR} E2E-3 make doctor exited $rc (instance-level issue, not counted as failure)"
-    fi
+    assert_exit 0 "$rc" "E2E-3 make doctor fencing-ipi"
 }
 
 test_e2e_inventory_fork() {
@@ -329,7 +325,7 @@ test_e2e_inventory_fork() {
     # E2E-4a: --ds-repo + --ds-branch → upserts both
     rc=0
     "$PREPARE" --topology fencing --method ipi \
-        --release-image "$img" --ci-token "${CI_TOKEN:-placeholder}" \
+        --release-image "$img" --ci-token "$CI_TOKEN" \
         --inventory "$INVENTORY" \
         --ds-repo https://github.com/example/dev-scripts --ds-branch test-branch \
         --output "${TMPDIR_BASE}/inv_fork1.sh" --force >/dev/null 2>&1 || rc=$?
@@ -339,16 +335,16 @@ test_e2e_inventory_fork() {
         assert_grep "$INVENTORY" '^dev_scripts_branch=test-branch' "E2E-4a branch upserted"
     }
 
-    # E2E-4b: without fork args → purges
+    # E2E-4b: without fork args → preserves existing override
     rc=0
     "$PREPARE" --topology fencing --method ipi \
-        --release-image "$img" --ci-token "${CI_TOKEN:-placeholder}" \
+        --release-image "$img" --ci-token "$CI_TOKEN" \
         --inventory "$INVENTORY" \
         --output "${TMPDIR_BASE}/inv_fork2.sh" --force >/dev/null 2>&1 || rc=$?
-    assert_exit 0 "$rc" "E2E-4b fork purge"
+    assert_exit 0 "$rc" "E2E-4b fork preserved (no-op)"
     [[ "$rc" -eq 0 ]] && {
-        assert_not_grep "$INVENTORY" '^dev_scripts_src_repo=' "E2E-4b repo purged"
-        assert_not_grep "$INVENTORY" '^dev_scripts_branch=' "E2E-4b branch purged"
+        assert_grep "$INVENTORY" '^dev_scripts_src_repo=https://github.com/example/dev-scripts' "E2E-4b repo preserved"
+        assert_grep "$INVENTORY" '^dev_scripts_branch=test-branch' "E2E-4b branch preserved"
     }
 
     cp "$inv_backup" "$INVENTORY"
@@ -375,14 +371,18 @@ test_resolver_digest_fallback
 test_resolver_passthrough
 
 # Tier 2
-if [[ "$HAS_E2E_CONFIG" == "true" ]]; then
+if [[ "$HAS_E2E_CONFIG" == "true" && "$HAS_CI_TOKEN" == "true" ]]; then
     test_e2e_fencing_ipi
     test_e2e_sno_agent
     test_e2e_doctor
     test_e2e_inventory_fork
 else
     echo ""
-    skip "Tier 2 — instance not configured for e2e (need inventory.ini + example configs)"
+    if [[ "$HAS_E2E_CONFIG" != "true" ]]; then
+        skip "Tier 2 — instance not configured for e2e (need inventory.ini + example configs)"
+    else
+        skip "Tier 2 — CI_TOKEN not set (export CI_TOKEN to enable e2e tests)"
+    fi
 fi
 
 echo ""
