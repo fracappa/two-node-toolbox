@@ -64,7 +64,7 @@ run_prepare() {
     local label="$1"; shift
     local outfile="${TMPDIR_BASE}/${label}.sh"
     local rc=0
-    "$PREPARE" --output "$outfile" "$@" >/dev/null 2>&1 || rc=$?
+    "$PREPARE" --output "$outfile" --inventory "${TMPDIR_BASE}/inventory.ini" "$@" >/dev/null 2>&1 || rc=$?
     echo "$outfile:$rc"
 }
 
@@ -111,6 +111,7 @@ test_transform_matrix() {
                         "$PREPARE" --topology "$topo" --method "$method" \
                             --release-image "$image" --ci-token "$ci_token" \
                             --arch "$arch" --ip-stack "$stack" \
+                            --inventory "${TMPDIR_BASE}/inventory.ini" \
                             --output "${TMPDIR_BASE}/${label}.sh" >/dev/null 2>&1 || rc=$?
                         assert_exit 3 "$rc" "$label (aarch64+${stack} blocked)"
                         continue
@@ -187,12 +188,14 @@ test_constraints() {
     local rc=0
     "$PREPARE" --topology fencing --method ipi --release-image "$img" \
         --ci-token "$ci" --arch aarch64 \
+        --inventory "${TMPDIR_BASE}/inventory.ini" \
         --output "${TMPDIR_BASE}/blocked_multi.sh" >/dev/null 2>&1 || rc=$?
     assert_exit 3 "$rc" "aarch64 + -multi blocked"
 
     # Missing --ci-token → exit 2
     rc=0
     "$PREPARE" --topology fencing --method ipi --release-image "$img" \
+        --inventory "${TMPDIR_BASE}/inventory.ini" \
         --output "${TMPDIR_BASE}/no_token.sh" >/dev/null 2>&1 || rc=$?
     assert_exit 2 "$rc" "missing --ci-token"
 
@@ -200,13 +203,15 @@ test_constraints() {
     touch "${TMPDIR_BASE}/exists.sh"
     rc=0
     "$PREPARE" --topology fencing --method ipi --release-image "$img" \
-        --ci-token "$ci" --output "${TMPDIR_BASE}/exists.sh" >/dev/null 2>&1 || rc=$?
+        --ci-token "$ci" --inventory "${TMPDIR_BASE}/inventory.ini" \
+        --output "${TMPDIR_BASE}/exists.sh" >/dev/null 2>&1 || rc=$?
     assert_exit 4 "$rc" "existing output without --force"
 
     # --force overwrites and creates backup
     rc=0
     "$PREPARE" --topology fencing --method ipi --release-image "$img" \
-        --ci-token "$ci" --output "${TMPDIR_BASE}/exists.sh" --force >/dev/null 2>&1 || rc=$?
+        --ci-token "$ci" --inventory "${TMPDIR_BASE}/inventory.ini" \
+        --output "${TMPDIR_BASE}/exists.sh" --force >/dev/null 2>&1 || rc=$?
     assert_exit 0 "$rc" "--force overwrites"
     if [[ -f "${TMPDIR_BASE}/exists.sh.bak" ]]; then
         pass "--force creates .bak"
@@ -233,6 +238,7 @@ test_constraints() {
     rc=0
     "$PREPARE" --topology fencing --method ipi --release-image "$img" \
         --ci-token "$ci" --ds-branch mybranch \
+        --inventory "${TMPDIR_BASE}/inventory.ini" \
         --output "${TMPDIR_BASE}/ds_branch_only.sh" >/dev/null 2>&1 || rc=$?
     assert_exit 2 "$rc" "--ds-branch without --ds-repo"
 }
@@ -274,12 +280,14 @@ INV
     assert_grep "$inv" '^dev_scripts_src_repo=https://github.com/other/dev-scripts' "repo-only upsert"
     assert_grep "$inv" '^dev_scripts_branch=master' "repo-only defaults branch=master"
 
-    # Neither → purges existing lines
+    # Neither → preserves existing lines and informs the user
+    local inv3_log="${TMPDIR_BASE}/inv3.log"
     "$PREPARE" --topology fencing --method ipi --release-image "$img" \
         --ci-token "$ci" --inventory "$inv" \
-        --output "${TMPDIR_BASE}/inv3.sh" --force >/dev/null 2>&1
-    assert_not_grep "$inv" '^dev_scripts_src_repo=' "purged repo"
-    assert_not_grep "$inv" '^dev_scripts_branch=' "purged branch"
+        --output "${TMPDIR_BASE}/inv3.sh" --force >"$inv3_log" 2>&1
+    assert_grep "$inv" '^dev_scripts_src_repo=https://github.com/other/dev-scripts' "preserved repo"
+    assert_grep "$inv" '^dev_scripts_branch=master' "preserved branch"
+    assert_grep "$inv3_log" 'Existing dev-scripts fork override preserved' "informs about preserved fork"
 
     # Missing inventory.ini + --ds-repo → error
     local rc=0

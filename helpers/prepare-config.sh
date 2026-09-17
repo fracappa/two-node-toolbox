@@ -153,16 +153,12 @@ handle_inventory() {
         upsert_ini_var "$inventory" "dev_scripts_branch" "$ds_branch"
         msg_info "Set dev-scripts fork: repo=${ds_repo} branch=${ds_branch}"
     elif [[ -f "$inventory" ]]; then
-        local removed=0
-        if grep -q '^dev_scripts_src_repo=' "$inventory"; then
-            sed -i '/^dev_scripts_src_repo=/d' "$inventory"
-            removed=1
+        local existing_repo="" existing_branch=""
+        existing_repo="$(grep '^dev_scripts_src_repo=' "$inventory" | cut -d= -f2-)" || true
+        existing_branch="$(grep '^dev_scripts_branch=' "$inventory" | cut -d= -f2-)" || true
+        if [[ -n "$existing_repo" || -n "$existing_branch" ]]; then
+            msg_info "Existing dev-scripts fork override preserved: repo=${existing_repo:-<unset>} branch=${existing_branch:-<unset>}"
         fi
-        if grep -q '^dev_scripts_branch=' "$inventory"; then
-            sed -i '/^dev_scripts_branch=/d' "$inventory"
-            removed=1
-        fi
-        [[ "$removed" -eq 0 ]] || msg_info "Cleared dev-scripts fork override from inventory.ini"
     fi
 }
 
