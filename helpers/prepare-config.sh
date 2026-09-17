@@ -75,8 +75,13 @@ METAL3
 # ---------------------------------------------------------------------------
 
 self_check() {
-    local file="$1" topology="$2"
+    local file="$1" topology="$2" release_image="$3"
     local ok=true
+
+    if ! grep -qF "export OPENSHIFT_RELEASE_IMAGE=${release_image}" "$file"; then
+        msg_err "Self-check: OPENSHIFT_RELEASE_IMAGE was not substituted"
+        ok=false
+    fi
 
     local scenario
     scenario=$(grep -oP '^export AGENT_E2E_TEST_SCENARIO="\K[^"]+' "$file" || true)
@@ -378,7 +383,7 @@ msg_info "Generating ${TOPOLOGY} config (${METHOD}, ${ARCH}, IP_STACK=${IP_STACK
 transform_config "$TMPFILE" "$RELEASE_IMAGE" "$IP_STACK" "$CI_TOKEN_VALUE" \
     "$SCENARIO" "$ARCH" "$METAL3_TAG"
 
-if ! self_check "$TMPFILE" "$TOPOLOGY"; then
+if ! self_check "$TMPFILE" "$TOPOLOGY" "$RELEASE_IMAGE"; then
     msg_err "Self-check failed; config not written"
     msg_err "  This likely indicates the example template has drifted from expected format"
     exit 5
