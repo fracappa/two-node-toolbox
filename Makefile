@@ -14,10 +14,14 @@ test-resource-agents:
 test-prepare-online:
 	@./hack/test-prepare-online.sh $(ARGS)
 
+test-prepare-config:
+	@./hack/test-prepare-config.sh $(ARGS)
+
 verify:
 	VALIDATE_ONLY=true $(MAKE) shellcheck
 	VALIDATE_ONLY=true $(MAKE) yamlfmt
 	$(MAKE) ansible-lint
+	$(MAKE) test-prepare-config
 
 install-pre-commit:
 	@echo "Installing pre-commit hook..."

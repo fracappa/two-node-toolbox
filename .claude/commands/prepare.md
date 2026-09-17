@@ -151,9 +151,9 @@ On failure:
 
 Before running Make, normalize the topology: if the user said `tnf`, use `fencing`; if `tna`, use `arbiter`. The `<topology>` below must be `arbiter`, `fencing`, or `sno`.
 
-**medium=aws** (default — no AWS= override needed):
+**medium=aws** (default):
 ```bash
-cd deploy && make sync-config && make doctor <topology>-<method>
+cd deploy && make sync-config && make doctor AWS=1 <topology>-<method>
 ```
 
 **medium=external:**
@@ -161,7 +161,7 @@ cd deploy && make sync-config && make doctor <topology>-<method>
 cd deploy && make doctor AWS=0 <topology>-<method>
 ```
 
-The `sync-config` call propagates `config/instance.env` to the canonical location (`deploy/aws-hypervisor/instance.env`) that doctor reads. `AWS=0` opts out of the instance.env requirement for external hosts.
+The `sync-config` call propagates `config/instance.env` to the canonical location (`deploy/aws-hypervisor/instance.env`) that doctor reads. `AWS=1` requires instance.env for AWS hosts; `AWS=0` (the default) opts out of that requirement for external hosts.
 
 Relay FAIL lines verbatim. Doctor is read-only — it won't break anything.
 

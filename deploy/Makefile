@@ -1,8 +1,8 @@
 # Valid cluster types for 'make deploy <cluster-type>'
 VALID_CLUSTER_TYPES := fencing-ipi fencing-agent fencing-assisted arbiter-ipi arbiter-agent arbiter-kcli fencing-kcli sno-ipi sno-agent
 
-# AWS hypervisor checks are on by default for doctor; opt out with AWS=0
-AWS ?= 1
+# AWS hypervisor checks are off by default for doctor; opt in with AWS=1
+AWS ?= 0
 
 # Handle 'make deploy <cluster-type>' pattern
 # When 'deploy' is first, validate any following arguments are valid cluster types
