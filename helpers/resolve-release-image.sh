@@ -119,7 +119,7 @@ get_bearer_token() {
     fi
 
     local headers realm service
-    headers=$(curl -sI --connect-timeout 10 "https://${registry}/v2/" 2>/dev/null) || true
+    headers=$(curl -sI --connect-timeout 10 --max-time 30 "https://${registry}/v2/" 2>/dev/null) || true
     realm=$(echo "$headers" | grep -ioP 'realm="\K[^"]+' | head -1) || true
     service=$(echo "$headers" | grep -ioP 'service="\K[^"]+' | head -1) || true
     [[ -n "$realm" ]] || return 1
@@ -130,7 +130,7 @@ get_bearer_token() {
     [[ -n "$auth_b64" ]] && auth_args=(-H "Authorization: Basic ${auth_b64}")
 
     local token_json
-    token_json=$(curl -fsS --connect-timeout 10 "${auth_args[@]}" \
+    token_json=$(curl -fsS --connect-timeout 10 --max-time 30 "${auth_args[@]}" \
         "${realm}?service=${service}&scope=repository:${repo}:pull" 2>/dev/null) || return 1
 
     if command -v jq >/dev/null 2>&1; then
@@ -149,7 +149,7 @@ registry_head_digest() {
     local tmpfile
     tmpfile=$(mktemp)
     local http_code
-    http_code=$(curl -sI --connect-timeout 30 \
+    http_code=$(curl -sI --connect-timeout 30 --max-time 60 \
         -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json" \
         "${auth_args[@]}" \
         -o /dev/null -D "$tmpfile" -w "%{http_code}" \
@@ -161,9 +161,11 @@ registry_head_digest() {
     rm -f "$tmpfile"
 
     case "$http_code" in
-        200) echo "$digest"; return 0 ;;
+        200)     echo "$digest"; return 0 ;;
         401|403) return 1 ;;
-        *) return 1 ;;
+        404)     msg_err "Image not found: ${repo}:${reference}"; return 2 ;;
+        000)     msg_err "Registry unreachable: ${registry}"; return 3 ;;
+        *)       msg_err "Registry returned HTTP ${http_code}"; return 3 ;;
     esac
 }
 
@@ -414,12 +416,24 @@ resolve_digest() {
     local token
     token="$(get_bearer_token "$IMG_REGISTRY" "$IMG_REPO" "$pull_secret" "$ci_token" 2>/dev/null)" || true
 
-    local digest
-    if ! digest="$(registry_head_digest "$IMG_REGISTRY" "$IMG_REPO" "$reference" "$token")"; then
-        msg_err "Access denied resolving digest for ${pullspec}"
-        access_hint "$IMG_REGISTRY"
-        return 5
-    fi
+    local digest rc=0
+    digest="$(registry_head_digest "$IMG_REGISTRY" "$IMG_REPO" "$reference" "$token")" || rc=$?
+    case "$rc" in
+        0) ;;
+        1)
+            msg_err "Access denied resolving digest for ${pullspec}"
+            access_hint "$IMG_REGISTRY"
+            return 5
+            ;;
+        2)
+            msg_err "Release not found: ${pullspec} — check the version number"
+            return 3
+            ;;
+        *)
+            msg_err "Registry error resolving digest for ${pullspec} — check network connectivity"
+            return 3
+            ;;
+    esac
 
     [[ -n "$digest" ]] || { msg_err "Could not resolve digest for ${pullspec}"; return 4; }
     echo "$(image_repo_sans_tag "$pullspec")@${digest}"
@@ -442,18 +456,38 @@ validate_access() {
 
     parse_image_ref "$pullspec"
     local reference="${IMG_TAG:-${IMG_DIGEST}}"
-    [[ -n "$reference" ]] || { msg_err "Cannot determine tag/digest from: ${pullspec}"; return 1; }
+    [[ -n "$reference" ]] || { msg_err "Cannot determine tag/digest from: ${pullspec}"; return 3; }
+
+    local has_creds
+    has_creds="$(extract_registry_auth "$IMG_REGISTRY" "$pull_secret")" || true
 
     local token
     token="$(get_bearer_token "$IMG_REGISTRY" "$IMG_REPO" "$pull_secret" "$ci_token" 2>/dev/null)" || true
 
-    if ! registry_head_digest "$IMG_REGISTRY" "$IMG_REPO" "$reference" "$token" >/dev/null; then
-        msg_err "Access denied: ${pullspec}"
+    if [[ -n "$has_creds" && -z "$token" ]]; then
+        msg_err "Pull secret has credentials for ${IMG_REGISTRY} but authentication failed"
         access_hint "$IMG_REGISTRY"
         return 1
     fi
 
-    return 0
+    local rc=0
+    registry_head_digest "$IMG_REGISTRY" "$IMG_REPO" "$reference" "$token" >/dev/null || rc=$?
+    case "$rc" in
+        0) return 0 ;;
+        1)
+            msg_err "Access denied: ${pullspec}"
+            access_hint "$IMG_REGISTRY"
+            return 1
+            ;;
+        2)
+            msg_err "Image not found: ${pullspec} — check the version number"
+            return 2
+            ;;
+        *)
+            msg_err "Registry error validating access to ${pullspec} — check network connectivity"
+            return 3
+            ;;
+    esac
 }
 
 # ---------------------------------------------------------------------------
@@ -587,8 +621,23 @@ else
     esac
 fi
 
+if [[ "$VALIDATE_ACCESS" == "true" && ! -f "$PULL_SECRET" ]]; then
+    parse_image_ref "$RESOLVED"
+    if [[ "$IMG_REGISTRY" != "$CI_REGISTRY" || -z "$CI_TOKEN_VALUE" ]]; then
+        msg_err "Pull secret not found: ${PULL_SECRET}"
+        msg_err "  --validate-access requires a pull secret for ${IMG_REGISTRY}"
+        exit 5
+    fi
+fi
+
 if [[ "$VALIDATE_ACCESS" == "true" ]]; then
-    validate_access "$RESOLVED" "$PULL_SECRET" "$CI_TOKEN_VALUE" || exit 5
+    rc=0
+    validate_access "$RESOLVED" "$PULL_SECRET" "$CI_TOKEN_VALUE" || rc=$?
+    case "$rc" in
+        0) ;;
+        1) exit 5 ;;
+        *) exit 3 ;;
+    esac
     ok "Access validated for ${RESOLVED}"
 fi
 

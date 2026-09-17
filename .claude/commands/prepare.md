@@ -101,7 +101,8 @@ helpers/resolve-release-image.sh \
 
 Capture stdout (single-line pullspec). On failure:
 - Exit 2: invalid version spec → show valid formats
-- Exit 3: no matching release → suggest checking version number
+- Exit 3: no matching release, or a registry error → suggest checking the
+  version number first, and network/registry connectivity if that's not it
 - Exit 5: access denied → point to `/setup` for credentials
 
 ### Step 3: Ensure instance.env exists (medium=aws only)
