@@ -142,6 +142,10 @@ upsert_ini_var() {
     else
         sed -i "/^\[metal_machine:vars\]/a ${key}=${value}" "$file"
     fi
+    grep -q "^${key}=${value}$" "$file" || {
+        msg_err "Failed to set ${key} in ${file} (missing [metal_machine:vars] section?)"
+        return 1
+    }
 }
 
 handle_inventory() {
@@ -154,8 +158,8 @@ handle_inventory() {
             return 1
         }
         [[ -n "$ds_branch" ]] || ds_branch="master"
-        upsert_ini_var "$inventory" "dev_scripts_src_repo" "$ds_repo"
-        upsert_ini_var "$inventory" "dev_scripts_branch" "$ds_branch"
+        upsert_ini_var "$inventory" "dev_scripts_src_repo" "$ds_repo" || return 1
+        upsert_ini_var "$inventory" "dev_scripts_branch" "$ds_branch" || return 1
         msg_info "Set dev-scripts fork: repo=${ds_repo} branch=${ds_branch}"
     elif [[ -f "$inventory" ]]; then
         local existing_repo="" existing_branch=""
