@@ -159,10 +159,10 @@ cd deploy && make sync-config && make doctor AWS=1 <topology>-<method>
 
 **medium=external:**
 ```bash
-cd deploy && make doctor AWS=0 <topology>-<method>
+cd deploy && make sync-config && make doctor AWS=0 <topology>-<method>
 ```
 
-The `sync-config` call propagates `config/instance.env` to the canonical location (`deploy/aws-hypervisor/instance.env`) that doctor reads. `AWS=1` requires instance.env for AWS hosts; `AWS=0` (the default) opts out of that requirement for external hosts.
+The `sync-config` call propagates all `config/` files to their canonical locations (topology configs, pull-secret.json, and — for the AWS branch — `instance.env`) that doctor reads. `AWS=1` requires instance.env for AWS hosts; `AWS=0` (the default) opts out of that requirement for external hosts.
 
 Relay FAIL lines verbatim. Doctor is read-only — it won't break anything.
 
