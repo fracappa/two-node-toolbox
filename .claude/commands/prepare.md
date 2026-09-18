@@ -23,6 +23,9 @@ You are preparing an OpenShift cluster configuration for deployment via dev-scri
 
 ## Version Mapping
 
+The major version is not restricted to `4.x` — any `X.Y` accepted by
+`helpers/resolve-release-image.sh` works (e.g. `5.1-nightly`).
+
 | User says | Resolver spec |
 |-----------|---------------|
 | `4.21 nightly` | `4.21-nightly` |
@@ -30,6 +33,8 @@ You are preparing an OpenShift cluster configuration for deployment via dev-scri
 | `4.22 EC` | `4.22-ec` |
 | `4.20` or `4.20 GA` | `4.20` |
 | `4.20.5` | `4.20.5` |
+| `5.1 nightly` | `5.1-nightly` |
+| `latest 5.2 EC/RC` | `5.2-prerelease` |
 | Contains `/` or `@sha256:` | `--pullspec` (explicit) |
 
 ## Non-Interactive Contract

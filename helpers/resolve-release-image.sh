@@ -502,9 +502,11 @@ Usage:
     ${SCRIPT_NAME} (--version SPEC | --pullspec IMAGE) [OPTIONS]
 
 Version spec:
-    --version SPEC          X.Y, X.Y-KIND, or X.Y.Z
+    --version SPEC          X.Y, X.Y-KIND, or X.Y.Z (major version not
+                            restricted to 4.x)
                             KIND: nightly, ec, rc, prerelease, ga (default: ga)
-                            Examples: 4.21-nightly, 4.20, 4.20-ec, 4.19.12
+                            Examples: 4.21-nightly, 4.20, 4.20-ec, 4.19.12,
+                                      5.1-nightly
     --pullspec IMAGE        Explicit image (digest/validation still apply)
 
 Options:
@@ -542,6 +544,9 @@ Examples:
 
     # Validate access to a CI nightly
     ${SCRIPT_NAME} --version 4.21-nightly --validate-access --ci-token \$CI_TOKEN
+
+    # Latest 5.1 nightly on aarch64 (any major version works, not just 4.x)
+    ${SCRIPT_NAME} --version 5.1-nightly --arch aarch64
 EOF
     exit "${1:-0}"
 }
